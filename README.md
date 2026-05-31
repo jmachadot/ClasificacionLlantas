@@ -219,22 +219,7 @@ Por cada `run` se crea `outputs/<run_name>/` con:
 
 ---
 
-## 8. Sugerencia de estructura del informe (formato NeurIPS, 6–10 páginas)
-
-1. **Motivación** — seguridad vial, costo/subjetividad de la inspección manual.
-2. **Trabajos relacionados** (≥5 refs) — CNN para defectos, ResNet, EfficientNet,
-   Focal Loss, Grad-CAM.
-3. **Metodología** — datos y particiones, arquitecturas, pérdidas, estrategias de
-   desbalance, protocolo de entrenamiento.
-4. **Experimentos** — comparación, ablación, desbalance (usar las tablas de
-   `outputs/`).
-5. **Resultados** — métricas, matrices de confusión, ROC, Grad-CAM.
-6. **Discusión crítica de limitaciones** — tamaño del dataset, sesgos de captura,
-   generalización a otras condiciones, riesgos de despliegue.
-
----
-
-## 9. Solución de problemas
+## 8. Solución de problemas
 
 - **`torch.cuda.is_available()` devuelve `False`** → reinstala torch con el índice
   CUDA correcto (sección 3); revisa que el driver NVIDIA esté actualizado.
@@ -244,8 +229,3 @@ Por cada `run` se crea `outputs/<run_name>/` con:
 - **`num_workers` lento o cuelga en Windows** → usa `--num-workers 0`.
 
 ---
-
-> Nota académica: implementación original con contribuciones propias (CNN desde
-> cero, Grad-CAM, manejo de desbalance, ablación). Los backbones preentrenados se
-> usan solo donde el enunciado lo permite. No copiar notebooks públicos —
-> el plagio implica reprobación.
