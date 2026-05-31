@@ -12,7 +12,7 @@ El código se ejecuta de extremo a extremo con un único comando (`python main.p
 
 ## 1. Requisitos
 
-- Python 3.10–3.11
+- Python 3.11
 - GPU NVIDIA con drivers CUDA (recomendado). Funciona también en CPU, pero lento.
 - VS Code con la extensión **Python** (de Microsoft).
 - Cuenta de Kaggle (para descargar el dataset).
