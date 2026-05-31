@@ -1,0 +1,279 @@
+\documentclass{article}
+
+% ---------------------------------------------------------------------------
+% Formato NeurIPS. Necesitas el archivo de estilo neurips_2024.sty junto a
+% este main.tex (ver COMO_COMPILAR.md). En Overleaf, parte de la plantilla
+% oficial "NeurIPS 2024" y pega este contenido.
+%
+% Si NO tienes el .sty, comenta la línea \usepackage[final]{neurips_2024}
+% y descomenta el bloque "FALLBACK" más abajo para compilar con article.
+% ---------------------------------------------------------------------------
+\usepackage[final]{neurips_2024}
+
+% --- FALLBACK (sin neurips_2024.sty): descomenta estas 3 líneas ---
+% \usepackage[margin=1in]{geometry}
+% \usepackage{times}
+% \renewcommand{\headeright}{}
+% ------------------------------------------------------------------
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noindentfirst]{babel}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{subcaption}
+
+\graphicspath{{figures/}}
+
+% Comando para marcar texto pendiente de completar
+\newcommand{\TODO}[1]{\textcolor{red}{[\textbf{COMPLETAR}: #1]}}
+
+\title{Clasificación de Llantas Dañadas mediante Reconocimiento de Textura:\\
+       CNN desde Cero frente a \emph{Transfer Learning}, con Interpretabilidad
+       Grad-CAM y Manejo del Desbalance de Clases}
+
+% Reemplaza con los integrantes del grupo.
+\author{%
+  Nombre Apellido \\
+  Afiliación / Curso \\
+  \texttt{correo@dominio} \\
+  \And
+  Nombre Apellido \\
+  Afiliación / Curso \\
+  \texttt{correo@dominio} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+La inspección manual del estado de las llantas de vehículos es costosa, subjetiva
+y difícil de escalar. Proponemos un sistema de clasificación binaria basado en redes
+neuronales convolucionales (CNN) que distingue entre llantas en buen estado y
+llantas dañadas a partir de la textura superficial. Comparamos de forma rigurosa una
+CNN entrenada desde cero contra modelos de \emph{transfer learning}
+(ResNet-50 y EfficientNet-B0 preentrenados en ImageNet), evaluando con métricas
+sensibles al desbalance (precisión, \emph{recall}, F1 y AUC-ROC). Analizamos el efecto
+del desbalance de clases y cuantificamos el impacto de tres estrategias de mitigación
+(pesos de clase, sobremuestreo y pérdida focal). Mediante Grad-CAM interpretamos qué
+patrones de textura el modelo asocia al daño, y discutimos cualitativamente los modos
+de fallo. \TODO{resumir aquí el resultado principal en 1--2 frases con cifras, p.\,ej.
+``el mejor modelo alcanza F1$=$0.XX y AUC$=$0.XX''.}
+\end{abstract}
+
+% ===========================================================================
+\section{Introducción y Motivación}
+% ===========================================================================
+El desgaste y el daño en las llantas constituyen un riesgo crítico para la seguridad
+vial. La inspección visual humana no escala a entornos industriales y presenta
+variabilidad entre inspectores. Un clasificador automático fiable podría servir de
+apoyo al tamizaje, priorizando unidades para revisión experta.
+
+Este trabajo aborda la detección de daño como un problema de clasificación binaria de
+imágenes de textura. Nuestras contribuciones son: (i) la implementación de una CNN
+propia desde cero y su comparación rigurosa contra \emph{backbones} preentrenados;
+(ii) un estudio del desbalance de clases con varias estrategias de mitigación;
+(iii) un análisis de interpretabilidad con Grad-CAM que vincula las decisiones del
+modelo con regiones de textura; y (iv) un análisis cualitativo de fallos.
+\TODO{ajustar las contribuciones a lo que efectivamente obtuviste.}
+
+% ===========================================================================
+\section{Trabajos Relacionados}
+% ===========================================================================
+Las CNN profundas transformaron la clasificación de imágenes a partir de AlexNet
+\cite{krizhevsky2012alexnet} sobre ImageNet \cite{deng2009imagenet}. La normalización
+por lotes \cite{ioffe2015batchnorm} estabilizó el entrenamiento de redes profundas, y
+las conexiones residuales de ResNet \cite{he2016resnet} permitieron entrenar
+arquitecturas muy profundas. EfficientNet \cite{tan2019efficientnet} propuso un escalado
+compuesto que mejora la relación precisión/cómputo. Para problemas desbalanceados, la
+pérdida focal \cite{lin2017focal} reduce la contribución de los ejemplos fáciles y
+enfatiza los difíciles. En interpretabilidad, Grad-CAM \cite{selvaraju2017gradcam}
+produce mapas de localización a partir de los gradientes de la última capa
+convolucional. \TODO{añade al menos una referencia específica de inspección de
+defectos/textura o de detección de daño en llantas, y la cita del propio dataset
+(mínimo 5 referencias en total).}
+
+% ===========================================================================
+\section{Metodología}
+% ===========================================================================
+\subsection{Datos y particiones}
+Empleamos el conjunto \emph{Tire Texture Image Recognition} (Kaggle), con imágenes
+organizadas en carpetas por clase, mapeadas a las etiquetas binarias
+\texttt{good} (0) y \texttt{damaged} (1). Realizamos una partición estratificada
+70\%/15\%/15\% en entrenamiento/validación/prueba con semilla fija para
+reproducibilidad. \TODO{reporta el número de imágenes por clase y por partición
+(tomados de \texttt{outputs/<run>/data\_info.json}).}
+
+\subsection{Arquitecturas}
+Comparamos tres modelos. (1)~Una \textbf{CNN desde cero} de cuatro bloques
+convolucionales (Conv--BN--ReLU $\times 2$ + \emph{max-pooling}), \emph{global average
+pooling} y una cabeza totalmente conectada con \emph{dropout}. (2)~\textbf{ResNet-50}
+\cite{he2016resnet} preentrenada en ImageNet con la capa final reemplazada por un único
+logit. (3)~\textbf{EfficientNet-B0} \cite{tan2019efficientnet} con un reemplazo análogo
+de la cabeza. Todos los modelos emiten un solo logit (clase positiva $=$ daño).
+
+\subsection{Funciones de pérdida y desbalance de clases}
+Como pérdida base usamos entropía cruzada binaria con logits (BCE). Para el desbalance
+evaluamos: (a) \textbf{pesos de clase} vía \texttt{pos\_weight} $= N_{\text{neg}}/N_{\text{pos}}$;
+(b) \textbf{sobremuestreo} con \texttt{WeightedRandomSampler}; y (c) \textbf{pérdida focal}
+\cite{lin2017focal},
+\begin{equation}
+\mathcal{L}_{\text{focal}} = -\alpha_t\,(1-p_t)^{\gamma}\,\log(p_t),
+\end{equation}
+con $\alpha=0.25$ y $\gamma=2.0$ por defecto.
+
+\subsection{Protocolo de entrenamiento}
+Optimizador AdamW, planificador de tasa de aprendizaje por \emph{cosine annealing},
+entrenamiento en precisión mixta (AMP) y \emph{early stopping} según el F1 de
+validación. \TODO{especifica épocas, tamaño de lote, tasa de aprendizaje y aumento de
+datos finales (de \texttt{config.json}).} El aumento de datos contempla recorte
+aleatorio, volteos, rotaciones y \emph{jitter} de color; la variante ``strong'' añade
+desenfoque y \emph{random erasing}.
+
+% ===========================================================================
+\section{Experimentos}
+% ===========================================================================
+Diseñamos tres bloques experimentales: (A) comparación de arquitecturas;
+(B) ablación sobre tres factores (función de pérdida, intensidad del aumento de datos
+y profundidad del \emph{backbone}); y (C) estudio del desbalance de clases. Todas las
+métricas se reportan sobre el conjunto de prueba retenido.
+
+% ===========================================================================
+\section{Resultados}
+% ===========================================================================
+\subsection{Comparación de arquitecturas}
+La Tabla~\ref{tab:arch} resume el desempeño. \TODO{completa con
+\texttt{outputs/comparison\_architectures.csv} y comenta qué arquitectura gana y por
+qué (capacidad vs.\ datos disponibles, beneficio del preentrenamiento).}
+
+\begin{table}[ht]
+  \centering
+  \caption{Comparación de arquitecturas en el conjunto de prueba.}
+  \label{tab:arch}
+  \begin{tabular}{lccccc}
+    \toprule
+    Modelo & Exactitud & Precisión & Recall & F1 & AUC-ROC \\
+    \midrule
+    CNN desde cero       & -- & -- & -- & -- & -- \\
+    ResNet-50 (transfer) & -- & -- & -- & -- & -- \\
+    EfficientNet-B0      & -- & -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La Figura~\ref{fig:cm_roc} muestra la matriz de confusión y la curva ROC del mejor
+modelo. \TODO{interpreta los falsos negativos (daño no detectado) frente a los falsos
+positivos.}
+
+\begin{figure}[ht]
+  \centering
+  \begin{subfigure}{0.42\textwidth}
+    \includegraphics[width=\linewidth]{confusion_matrix.png}
+    \caption{Matriz de confusión.}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.42\textwidth}
+    \includegraphics[width=\linewidth]{roc_curve.png}
+    \caption{Curva ROC.}
+  \end{subfigure}
+  \caption{Desempeño del mejor modelo en prueba. \TODO{copiar las imágenes desde
+  \texttt{outputs/<run>/} a la carpeta \texttt{figures/}.}}
+  \label{fig:cm_roc}
+\end{figure}
+
+\subsection{Estudio de ablación}
+La Tabla~\ref{tab:ablation} reporta el efecto de cada factor.
+\TODO{completa con \texttt{outputs/ablation.csv}.}
+
+\begin{table}[ht]
+  \centering
+  \caption{Ablación: pérdida, aumento de datos y profundidad del backbone.}
+  \label{tab:ablation}
+  \begin{tabular}{llccc}
+    \toprule
+    Factor & Variante & Recall & F1 & AUC-ROC \\
+    \midrule
+    Pérdida   & BCE            & -- & -- & -- \\
+    Pérdida   & Focal          & -- & -- & -- \\
+    Aumento   & none           & -- & -- & -- \\
+    Aumento   & standard       & -- & -- & -- \\
+    Aumento   & strong         & -- & -- & -- \\
+    Backbone  & ResNet-18      & -- & -- & -- \\
+    Backbone  & ResNet-50      & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Desbalance de clases}
+\TODO{indica el ratio de desbalance (de \texttt{data\_info.json}).} La
+Tabla~\ref{tab:imbalance} compara las estrategias de mitigación frente al modelo sin
+mitigación. \TODO{completa con \texttt{outputs/imbalance\_study.csv} y discute el
+\emph{trade-off}: las estrategias que suben el \emph{recall} de la clase de daño
+suelen costar precisión.}
+
+\begin{table}[ht]
+  \centering
+  \caption{Efecto de las estrategias de mitigación del desbalance.}
+  \label{tab:imbalance}
+  \begin{tabular}{lcccc}
+    \toprule
+    Estrategia & Precisión & Recall & F1 & AUC-ROC \\
+    \midrule
+    Sin mitigación & -- & -- & -- & -- \\
+    Pesos de clase & -- & -- & -- & -- \\
+    Sobremuestreo  & -- & -- & -- & -- \\
+    Pérdida focal  & -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Interpretabilidad (Grad-CAM)}
+La Figura~\ref{fig:gradcam} muestra mapas de activación para muestras de ambas clases.
+\TODO{describe qué patrones de textura (grietas, deformaciones, bordes irregulares)
+activan la predicción de daño, y si las activaciones son plausibles.}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.7\textwidth]{gradcam.png}
+  \caption{Mapas Grad-CAM sobre ejemplos \texttt{good} y \texttt{damaged}.}
+  \label{fig:gradcam}
+\end{figure}
+
+\subsection{Análisis cualitativo de fallos}
+La Figura~\ref{fig:failures} recopila los ejemplos peor clasificados.
+\TODO{comenta al menos cinco casos con hipótesis de causa (iluminación, oclusión,
+ambigüedad de la etiqueta, daño sutil, textura atípica).}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{failures.png}
+  \caption{Ejemplos mal clasificados (falsos negativos y falsos positivos).}
+  \label{fig:failures}
+\end{figure}
+
+% ===========================================================================
+\section{Discusión y Limitaciones}
+% ===========================================================================
+\TODO{discute de forma crítica:} tamaño y representatividad del dataset; posible sesgo
+en las condiciones de captura; brecha entre el desempeño en prueba y el esperado en
+producción; riesgos de despliegue (un falso negativo deja pasar una llanta peligrosa);
+y dependencia de los pesos preentrenados de ImageNet, cuyo dominio difiere del de
+texturas de llantas.
+
+% ===========================================================================
+\section{Conclusión}
+% ===========================================================================
+\TODO{resume el hallazgo principal, la mejor configuración y una línea de trabajo
+futuro (p.\,ej.\ segmentación del daño o detección multiclase de tipos de defecto).}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
